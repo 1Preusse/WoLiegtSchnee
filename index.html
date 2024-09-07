@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deutscher Schneefinder</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+        #map { height: 400px; width: 100%; }
+        input, button { margin: 10px 0; padding: 5px; }
+        #result { margin-top: 20px; }
+        .note { background-color: #ffffd0; padding: 10px; border: 1px solid #e6e600; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Deutscher Schneefinder</h1>
+    <input type="text" id="latitude" placeholder="Breitengrad (z.B. 52.5200)">
+    <input type="text" id="longitude" placeholder="Längengrad (z.B. 13.4050)">
+    <button onclick="findSnow()">Nächsten Schnee finden</button>
+    <div id="map"></div>
+    <p id="result"></p>
+    <div class="note">
+        <strong>Hinweis:</strong> Die Schneedaten werden täglich um 6 Uhr aktualisiert.
+    </div>
+
+    <script>
+    var map;
+    map = L.map('map').setView([51.165691, 10.451526], 6);  // Center on Germany
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    function findSnow() {
+        const lat = parseFloat(document.getElementById('latitude').value);
+        const lon = parseFloat(document.getElementById('longitude').value);
+
+        if (isNaN(lat) || isNaN(lon)) {
+            alert('Bitte geben Sie gültige Koordinaten ein.');
+            return;
+        }
+
+        // Clear previous markers and lines
+        map.eachLayer((layer) => {
+            if (layer instanceof L.Marker || layer instanceof L.Polyline) {
+                map.removeLayer(layer);
+            }
+        });
+
+        // Add marker for user location
+        L.marker([lat, lon]).addTo(map).bindPopup('Ihr Standort').openPopup();
+
+        // Load and parse the CSV file
+        Papa.parse('processed_data/snow_stations.csv', {
+            download: true,
+            header: true,
+            complete: function(results) {
+                let nearestSnowStation = null;
+                let shortestDistance = Infinity;
+
+                results.data.forEach(station => {
+                    const stationLat = parseFloat(station.Latitude);
+                    const stationLon = parseFloat(station.Longitude);
+                    const snowHeight = parseFloat(station['Sensor Height']) || 0;
+
+                    if (snowHeight > 0) {
+                        const distance = getDistance(lat, lon, stationLat, stationLon);
+                        if (distance < shortestDistance) {
+                            shortestDistance = distance;
+                            nearestSnowStation = station;
+                        }
+                    }
+                });
+
+                if (nearestSnowStation) {
+                    const stationLat = parseFloat(nearestSnowStation.Latitude);
+                    const stationLon = parseFloat(nearestSnowStation.Longitude);
+                    
+                    // Add marker for snow station
+                    L.marker([stationLat, stationLon]).addTo(map)
+                        .bindPopup(`${nearestSnowStation['Station Name']}<br>Schneehöhe: ${nearestSnowStation['Sensor Height']} cm`);
+
+                    // Draw line between user location and snow station
+                    L.polyline([[lat, lon], [stationLat, stationLon]], {color: 'blue'}).addTo(map);
+
+                    // Fit map to show both points
+                    map.fitBounds([[lat, lon], [stationLat, stationLon]]);
+
+                    document.getElementById('result').innerHTML = `Der nächste Schnee befindet sich bei ${nearestSnowStation['Station Name']}, etwa ${Math.round(shortestDistance)} km entfernt. Schneehöhe: ${nearestSnowStation['Sensor Height']} cm.`;
+                } else {
+                    document.getElementById('result').innerHTML = 'Hey, sorry aber heute gibt es keinen Schnee in Deutschland. Auswandern ist eine Option.';
+                }
+            }
+        });
+    }
+
+    function getDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371; // Radius of the earth in km
+        const dLat = deg2rad(lat2-lat1);
+        const dLon = deg2rad(lon2-lon1);
+        const a = 
+            Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+            Math.sin(dLon/2) * Math.sin(dLon/2)
+        ; 
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+        const d = R * c; // Distance in km
+        return d;
+    }
+
+    function deg2rad(deg) {
+        return deg * (Math.PI/180)
+    }
+    </script>
+</body>
+</html>
