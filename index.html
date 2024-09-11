@@ -113,6 +113,42 @@
     function deg2rad(deg) {
         return deg * (Math.PI/180)
     }
+    
+    function executePythonScript() {
+        fetch('execute_python.php', { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    console.log('Python script executed successfully:', data.output);
+                    // You might want to update your snow data here
+                    // For example, you could reload the CSV file:
+                    // Papa.parse('processed_data/snow_stations.csv', { ... });
+                } else {
+                    console.error('Error executing Python script:', data.message);
+                }
+            })
+            .catch(error => console.error('Error:', error));
+    }
+
+    function scheduleScriptExecution() {
+        const now = new Date();
+        const executionTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 4, 0, 0); // 4:00 AM today
+
+        // If it's already past 4 AM, schedule for tomorrow
+        if (now > executionTime) {
+            executionTime.setDate(executionTime.getDate() + 1);
+        }
+
+        const timeUntilExecution = executionTime - now;
+
+        setTimeout(() => {
+            executePythonScript();
+            scheduleScriptExecution(); // Schedule the next execution
+        }, timeUntilExecution);
+    }
+
+    // Start the scheduling when the page loads
+    scheduleScriptExecution();
     </script>
 </body>
 </html>
